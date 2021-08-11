@@ -40,10 +40,10 @@ class USBtin(object):
      active
      Listen only, sending messages is not possible
      Loop back the sent CAN messages. Disconnected from physical CAN bus
-	 
-	 modes for timestamping received messages:
-	 timestamp based on internal USBtin timestamp
-	 use system time as timestamp
+     
+     modes for timestamping received messages:
+     timestamp based on internal USBtin timestamp
+     use system time as timestamp
     """
     ACTIVE, LISTENONLY, LOOPBACK = range(3)
 
@@ -75,7 +75,6 @@ class USBtin(object):
         self._mode_timestamp = mode_timestamp
         self._timestamp_offset = -1
         self._last_timestamp = 0
-        self._minutes = 0
 
     def get_firmware_version(self):
         """ get firmware version that was acquired during connect() """
@@ -306,7 +305,9 @@ class USBtin(object):
                             
                             # save first received timestamp as offset
                             if (self._timestamp_offset == -1):
-                                self._timestamp_offset = canmsg._timestamp                     
+                                self._timestamp_offset = canmsg._timestamp
+
+                            timestamp_original = canmsg._timestamp
                             
                             # calculate msg timestamp based on USBtin timestamp
                             if (self._mode_timestamp == USBtin.TIMESTAMP_INTERNAL):
@@ -322,7 +323,7 @@ class USBtin(object):
                                 canmsg._timestamp = int(round(time()*1000))  
                             
                             # save current timestamp as last timestamp
-                            self._last_timestamp = canmsg._timestamp        # CAN msg time stamp in ms
+                            self._last_timestamp = timestamp_original        # CAN msg time stamp in ms
                                                      
                             # give the CAN message to the listeners
                             for listener in self.listeners:
