@@ -24,6 +24,7 @@ from __future__ import absolute_import, division, print_function
 import serial
 import sys
 from time import sleep
+from time import time
 #from thread import start_new_thread
 import threading
 from .usbtinexception import USBtinException
@@ -39,16 +40,23 @@ class USBtin(object):
      active
      Listen only, sending messages is not possible
      Loop back the sent CAN messages. Disconnected from physical CAN bus
+	 
+	 modes for timestamping received messages:
+	 timestamp based on internal USBtin timestamp
+	 use system time as timestamp
     """
     ACTIVE, LISTENONLY, LOOPBACK = range(3)
 
     """ enums for rx thread """
     RX_THREAD_STOPPED, RX_THREAD_RUNNING, RX_THREAD_TERMINATE = range(3)
+    
+    """ enum form timestamp mode """
+    TIMESTAMP_SYSTEM, TIMESTAMP_INTERNAL = range(2)
 
     """ timeout for readng from serial port """
     READ_TIMEOUT = 1000
 
-    def __init__(self):
+    def __init__(self, mode_timestamp=TIMESTAMP_INTERNAL):
         """ initialiser """
         self.id = 0
         self.serial_number = 0
@@ -63,6 +71,11 @@ class USBtin(object):
 
         self.listeners = []
         self.tx_fifo = []
+        
+        self._mode_timestamp = mode_timestamp
+        self._timestamp_offset = -1
+        self._last_timestamp = 0
+        self._minutes = 0
 
     def get_firmware_version(self):
         """ get firmware version that was acquired during connect() """
@@ -290,7 +303,27 @@ class USBtin(object):
                         if cmd in 'tTrR':
                             # create CAN message from message string
                             canmsg = CANMessage.from_string(message)
-
+                            
+                            # save first received timestamp as offset
+                            if (self._timestamp_offset == -1):
+                                self._timestamp_offset = canmsg._timestamp                     
+                            
+                            # calculate msg timestamp based on USBtin timestamp
+                            if (self._mode_timestamp == USBtin.TIMESTAMP_INTERNAL):
+                                if (self._last_timestamp > canmsg._timestamp):  # wrap around detected
+                                    # update can message timestamp
+                                    canmsg._timestamp = canmsg._timestamp + 60000 - self._timestamp_offset
+                                else:
+                                    canmsg._timestamp = canmsg._timestamp - self._timestamp_offset
+                            
+                            # calculate msg timestamp based on system time
+                            elif (self._mode_timestamp == USBtin.TIMESTAMP_SYSTEM):
+                                # use current system time as timestamp
+                                canmsg._timestamp = int(round(time()*1000))  
+                            
+                            # save current timestamp as last timestamp
+                            self._last_timestamp = canmsg._timestamp        # CAN msg time stamp in ms
+                                                     
                             # give the CAN message to the listeners
                             for listener in self.listeners:
                                 listener(canmsg)
